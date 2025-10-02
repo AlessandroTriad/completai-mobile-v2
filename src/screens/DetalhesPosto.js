@@ -1,7 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AirbnbRating, Button, Icon } from '@rneui/themed';
-import { Buffer } from 'buffer';
-import crypto from 'crypto';
+import { Button, Icon } from '@rneui/themed';
 import { Component } from 'react';
 import {
   ActivityIndicator,
@@ -9,13 +7,15 @@ import {
   Dimensions,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { AirbnbRating, Rating } from 'react-native-ratings';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import Geolocation from 'react-native-geolocation-service';
 import { Popup } from 'react-native-map-link';
 import {
@@ -25,12 +25,13 @@ import {
   request,
   RESULTS,
 } from 'react-native-permissions';
+
 import DisplayItem from '../componentes/DisplayItem';
 import Header from '../componentes/Header';
 import StatusBar from '../componentes/StatusBar';
-import { secret_key_encrypt_data, server } from '../constants';
+import { server } from '../constants';
+import { decrypt } from '../utils/crypto'; // ✅ helper centralizado
 
-//var timerId
 const reviews = ['Muito Ruim', 'Ruim', 'Regular', 'Bom', 'Muito bom'];
 
 const windowWidth = Dimensions.get('window').width;
@@ -39,7 +40,6 @@ const sizeButtonIcon = 40;
 const fontSizeLabelButton = 14;
 const widthLabelButton = 100;
 
-//class DetalhesPosto extends Component {
 export default class DetalhesPosto extends Component {
   _isMounted = false;
 
@@ -50,7 +50,7 @@ export default class DetalhesPosto extends Component {
     slideAnimationDialog: false,
     alertMessage: '',
     alertDetailMessage: '',
-    alertIconType: 'check', // exclamation, times, check
+    alertIconType: 'check',
     locationPermission: '',
     layoutAjustePreco: {
       color_header: '#2c4152',
@@ -69,16 +69,14 @@ export default class DetalhesPosto extends Component {
   constructor(props) {
     super(props);
   }
-
   componentDidMount = async () => {
     _isMounted = true;
 
     this.props.navigation.addListener('focus', async () => {
-      //console.log("Detalhes Focus")
-
       await this.obterDadosArmazendados();
       this.obterDadosLocalizacao();
       let postoItem = await AsyncStorage.getItem('postoItem');
+      let jsonPosto = JSON.parse(postoItem) || {};
 
       this.state.customRating.pop();
       this.state.customRating.push(
@@ -86,7 +84,7 @@ export default class DetalhesPosto extends Component {
           key={1}
           count={5}
           reviews={reviews}
-          defaultRating={this.state.rating}
+          defaultRating={parseFloat(decrypt(jsonPosto.ex18)) || 0} // ✅ nota numérica
           size={35}
           reviewSize={20}
           showRating={true}
@@ -94,29 +92,26 @@ export default class DetalhesPosto extends Component {
         />,
       );
 
-      this.setState({ postoItem: JSON.parse(postoItem) || {}, rating: 0 });
+      this.setState({
+        postoItem: jsonPosto,
+        rating: parseFloat(decrypt(jsonPosto.ex18)) || 0, // ✅ inicializa rating
+      });
     });
 
     this.props.navigation.addListener('blur', async () => {
-      //console.log("Detalhes Blur")
-
       this.state.customRating.pop();
-
-      //clearInterval(timerId);
       this.setState({ rating: 0 });
     });
 
     if (_isMounted) {
-      //console.log("Detalhes Normal")
-
-      //clearInterval(timerId);
       await this.obterDadosArmazendados();
-      //this.verificarPermissoes()
-
       const posto = await AsyncStorage.getItem('postoItem');
       const jsonPosto = JSON.parse(posto);
 
-      this.setState({ postoItem: jsonPosto });
+      this.setState({
+        postoItem: jsonPosto,
+        rating: jsonPosto ? parseFloat(decrypt(jsonPosto.ex18)) || 0 : 0, // ✅ rating inicial
+      });
     }
   };
 
@@ -310,12 +305,10 @@ export default class DetalhesPosto extends Component {
   };
 
   openCameraFotoPlacar = async () => {
-    //clearInterval(timerId);
-
     const postoCaptura = {
       codItem: this.state.postoItem.ex1,
-      latitudePosto: this.decrypt(this.state.postoItem.ex9),
-      longitudePosto: this.decrypt(this.state.postoItem.ex10),
+      latitudePosto: decrypt(this.state.postoItem.ex9),
+      longitudePosto: decrypt(this.state.postoItem.ex10),
     };
 
     await AsyncStorage.setItem('postoCaptura', JSON.stringify(postoCaptura));
@@ -492,26 +485,6 @@ export default class DetalhesPosto extends Component {
     this.showAlert();
   };
 
-  decrypt = function (textToDecipher) {
-    var dec = '';
-
-    if (textToDecipher != null) {
-      var iv = Buffer(8);
-      iv.fill(0);
-
-      var decipher = crypto.createDecipheriv(
-        'des-cbc',
-        secret_key_encrypt_data,
-        iv,
-      );
-
-      var dec = decipher.update(textToDecipher, 'base64', 'utf8');
-      dec += decipher.final('utf8');
-    }
-
-    return dec;
-  };
-
   render() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#2c4152' }}>
@@ -533,29 +506,30 @@ export default class DetalhesPosto extends Component {
             <DisplayItem
               {...this.state.postoItem}
               displayLogo={true}
-              nomePosto={this.decrypt(this.state.postoItem.ex2)}
-              reviews={this.decrypt(this.state.postoItem.ex17)}
-              rating={this.decrypt(this.state.postoItem.ex18)}
+              nomePosto={decrypt(this.state.postoItem.ex2)}
+              reviews={decrypt(this.state.postoItem.ex17)}
+              rating={decrypt(this.state.postoItem.ex18)}
               endereco={
-                this.decrypt(this.state.postoItem.ex3) +
+                decrypt(this.state.postoItem.ex3) +
                 ` - ` +
-                this.decrypt(this.state.postoItem.ex4) +
+                decrypt(this.state.postoItem.ex4) +
                 ` - ` +
-                this.decrypt(this.state.postoItem.ex5)
+                decrypt(this.state.postoItem.ex5)
               }
-              bandeira={this.decrypt(this.state.postoItem.ex6)}
-              distancia={this.decrypt(this.state.postoItem.ex11)}
+              bandeira={decrypt(this.state.postoItem.ex6)}
+              distancia={decrypt(this.state.postoItem.ex11)}
               onFavorito={this.onFavorito}
               isFavorito={this.state.postoItem.ex7}
               isForaDoRaio={this.state.postoItem.ex12}
-              colorData={this.decrypt(this.state.postoItem.ex16)}
-              preco={this.decrypt(this.state.postoItem.ex13)}
-              atualizacao={this.decrypt(this.state.postoItem.ex15)}
+              colorData={decrypt(this.state.postoItem.ex16)}
+              preco={decrypt(this.state.postoItem.ex13)}
+              atualizacao={decrypt(this.state.postoItem.ex15)}
               isItemMapa={false}
               combustivel={this.state.filterData.combustivel}
             />
 
             <ScrollView>
+              {/* Traçar rota */}
               <View style={styles.containerPainel}>
                 <View style={styles.containerShadow}>
                   <View style={styles.containerInnerPanel}>
@@ -567,7 +541,6 @@ export default class DetalhesPosto extends Component {
                         color: 'white',
                       }}
                       title=" Traçar rota"
-                      //onPress={() => this.tracarRota(this.state.postoItem)}
                       onPress={() =>
                         this.setState({ isVisiblePopupRotas: true })
                       }
@@ -576,6 +549,7 @@ export default class DetalhesPosto extends Component {
                 </View>
               </View>
 
+              {/* Atualização de preço */}
               <View style={styles.containerPainel}>
                 <View style={styles.containerShadow}>
                   <View style={styles.containerInnerPanel}>
@@ -612,11 +586,7 @@ export default class DetalhesPosto extends Component {
                             color="#31af91"
                             size={(windowWidth * sizeButtonIcon) / widthRef}
                           />
-
-                          <Text style={styles.labelButton}>
-                            {/*Foto placar de preços*/}
-                            Enviar foto
-                          </Text>
+                          <Text style={styles.labelButton}>Enviar foto</Text>
                         </View>
                       </TouchableOpacity>
                     </View>
@@ -624,6 +594,7 @@ export default class DetalhesPosto extends Component {
                 </View>
               </View>
 
+              {/* Avaliação */}
               <View style={styles.containerPainel}>
                 <View style={styles.containerShadow}>
                   <View style={styles.containerInnerPanel}>
@@ -634,6 +605,7 @@ export default class DetalhesPosto extends Component {
                       Dê a sua avaliação para os serviços oferecidos pelo posto,
                       considerando o atendimento e a qualidade do combustível.
                     </Text>
+
                     <View
                       style={{
                         flexDirection: 'row',
@@ -641,14 +613,10 @@ export default class DetalhesPosto extends Component {
                         justifyContent: 'space-around',
                       }}
                     >
-                      <AirbnbRating
-                        key={1}
-                        count={5}
-                        reviews={reviews}
-                        defaultRating={this.state.rating}
-                        size={35}
-                        reviewSize={20}
-                        showRating={true}
+                      <Rating
+                        startingValue={0}
+                        imageSize={35}
+                        showRating={false} // 🔥 igual ao antigo
                         onFinishRating={rating => this.processarRating(rating)}
                       />
                     </View>
@@ -658,6 +626,7 @@ export default class DetalhesPosto extends Component {
             </ScrollView>
           </View>
 
+          {/* Modal de alerta */}
           <Modal
             animationType={'slide'}
             transparent={true}
@@ -716,6 +685,7 @@ export default class DetalhesPosto extends Component {
             </View>
           </Modal>
 
+          {/* Popup Rotas */}
           <Popup
             isVisible={this.state.isVisiblePopupRotas}
             onCancelPressed={() =>
@@ -730,28 +700,28 @@ export default class DetalhesPosto extends Component {
             }}
             appsWhiteList={['waze', 'google-maps', 'apple-maps']}
             options={{
-              latitude: this.decrypt(this.state.postoItem.ex9),
-              longitude: this.decrypt(this.state.postoItem.ex10),
-              title: this.decrypt(this.state.postoItem.ex2),
+              latitude: decrypt(this.state.postoItem.ex9),
+              longitude: decrypt(this.state.postoItem.ex10),
+              title: decrypt(this.state.postoItem.ex2),
               dialogTitle: 'Traçar rota',
               dialogMessage: 'Selecione o navegador para traçar a sua rota',
               cancelText: 'Cancelar',
             }}
-            style={{}}
           />
-        </View>
 
-        <View
-          style={[
-            styles.containerActivity,
-            { display: this.state.loading ? 'flex' : 'none' },
-          ]}
-        >
-          <ActivityIndicator
-            style={{ display: this.state.loading ? 'flex' : 'none' }}
-            size="large"
-            color="#rgba(0, 0, 0, 0.9)"
-          />
+          {/* Loader */}
+          <View
+            style={[
+              styles.containerActivity,
+              { display: this.state.loading ? 'flex' : 'none' },
+            ]}
+          >
+            <ActivityIndicator
+              style={{ display: this.state.loading ? 'flex' : 'none' }}
+              size="large"
+              color="#rgba(0, 0, 0, 0.9)"
+            />
+          </View>
         </View>
       </SafeAreaView>
     );

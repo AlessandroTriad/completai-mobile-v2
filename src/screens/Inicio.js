@@ -8,14 +8,14 @@ import {
   Linking,
   Modal,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import Carousel, { Pagination } from 'react-native-snap-carousel';
+import Carousel from 'react-native-reanimated-carousel';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import logo from '../../assets/images/logo_completai.png';
 import slide1 from '../../assets/images/slides/slide1.png';
 import slide2 from '../../assets/images/slides/slide2.png';
@@ -35,6 +35,7 @@ import {
 } from 'react-native-permissions';
 import { server, termosUso } from '../constants';
 
+const { width, height } = Dimensions.get('window');
 const BannerWidth = Dimensions.get('window').width;
 const BannerHeight = (523 * BannerWidth) / 745;
 
@@ -351,82 +352,84 @@ class Inicio extends Component {
 
           <LinearGradient
             colors={['rgba(0,48,66,1)', 'rgba(0,48,66,1)', '#fff', '#fff']}
-            style={styles.background}
+            style={{ flex: 1 }} // ocupa toda a tela
           >
-            <View style={styles.container}>
+            <View style={{ flex: 1 }}>
               <Carousel
-                ref={c => {
-                  this._carousel = c;
-                }}
+                width={width}
+                height={BannerHeight}
                 data={this.state.imagesCarousel}
-                renderItem={this.renderItem}
-                sliderWidth={BannerWidth}
-                itemWidth={BannerWidth}
-                autoplay={true}
-                loop={true}
-                enableSnap={true}
-                autoplayInterval={2000}
+                autoPlay
+                loop
+                autoPlayInterval={2000}
                 onSnapToItem={index => this.setState({ activeSlide: index })}
+                renderItem={({ item }) => this.renderItem({ item })}
               />
-            </View>
-            <View style={{ flex: 2, backgroundColor: '#fff' }}>
-              <Pagination
-                dotsLength={this.state.imagesCarousel.length}
-                activeDotIndex={this.state.activeSlide}
-                //containerStyle={{ backgroundColor: '#fff' }}
-                dotStyle={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 5,
-                  //top: -18,
-                  marginHorizontal: 8,
-                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                }}
-                inactiveDotStyle={{
-                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                }}
-                inactiveDotOpacity={0.4}
-                inactiveDotScale={0.6}
-              />
-            </View>
-          </LinearGradient>
 
-          <View
-            style={{
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: '#fff',
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => verificarPermissoes()}
-              style={{ flexDirection: 'row', justifyContent: 'center' }}
-            >
+              {/* Paginação customizada */}
               <View
-                style={[
-                  styles.button,
-                  { backgroundColor: 'rgba(94,111,130,1.0)' },
-                ]}
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  marginTop: 10,
+                }}
               >
-                <Text style={styles.buttonText}>COMEÇAR</Text>
+                {this.state.imagesCarousel.map((_, index) => (
+                  <View
+                    key={index}
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      marginHorizontal: 6,
+                      backgroundColor:
+                        index === this.state.activeSlide
+                          ? 'rgba(0, 0, 0, 0.8)'
+                          : 'rgba(0, 0, 0, 0.3)',
+                    }}
+                  />
+                ))}
               </View>
-            </TouchableOpacity>
+            </View>
 
-            <TouchableOpacity
-              onPress={() => openTermos()}
+            {/* Parte branca inferior com botão e termos */}
+            <View
               style={{
+                backgroundColor: '#fff',
                 paddingBottom: 20,
-                paddingTop: 10,
-                paddingLeft: 20,
-                paddingRight: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              <Text style={styles.labelTermosLink}>
-                Continuar significa que você leu e aceitou nossos termos de uso
-                e política de privacidade.
-              </Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                onPress={() => verificarPermissoes()}
+                style={{ flexDirection: 'row', justifyContent: 'center' }}
+              >
+                <View
+                  style={[
+                    styles.button,
+                    { backgroundColor: 'rgba(94,111,130,1.0)' },
+                  ]}
+                >
+                  <Text style={styles.buttonText}>COMEÇAR</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => openTermos()}
+                style={{
+                  paddingTop: 10,
+                  paddingLeft: 20,
+                  paddingRight: 20,
+                }}
+              >
+                <Text style={styles.labelTermosLink}>
+                  Continuar significa que você leu e aceitou nossos termos de
+                  uso e política de privacidade.
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
 
           <Modal
             animationType={'slide'}
@@ -486,6 +489,7 @@ class Inicio extends Component {
             </View>
           </Modal>
         </View>
+
         <View
           style={[
             styles.containerActivity,

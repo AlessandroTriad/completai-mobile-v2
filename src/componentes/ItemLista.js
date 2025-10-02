@@ -1,4 +1,6 @@
-import { AirbnbRating, Badge, Icon } from '@rneui/themed';
+import { Badge, Icon } from '@rneui/themed';
+import { AirbnbRating } from 'react-native-ratings';
+
 import { PureComponent } from 'react';
 import {
   Dimensions,

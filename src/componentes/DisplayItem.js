@@ -1,4 +1,4 @@
-import { AirbnbRating, Badge, Icon } from '@rneui/themed';
+import { Badge, Icon } from '@rneui/themed';
 import {
   Dimensions,
   Image,
@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Rating } from 'react-native-ratings';
+
 import logoAle from '../../assets/images/ALE.png';
 import logoBr from '../../assets/images/BR.png';
 import logoIpiranga from '../../assets/images/IPIRANGA.png';
@@ -25,7 +27,7 @@ const fontSizeNomePosto = 12;
 const fontSizeEndereco = 10;
 
 export default props => {
-  displayShadow = function (isItemLista) {
+  const displayShadow = function (isItemLista) {
     if (isItemLista) {
       return {
         paddingBottom: 10,
@@ -38,7 +40,7 @@ export default props => {
     }
   };
 
-  displayPadding = function (isItemLista) {
+  const displayPadding = function (isItemLista) {
     if (isItemLista) {
       return {
         paddingTop: 5,
@@ -51,11 +53,12 @@ export default props => {
     <View style={[styles.container]}>
       <View
         style={[
-          this.displayShadow(!props.isItemMapa),
-          this.displayPadding(!props.isItemMapa),
+          displayShadow(!props.isItemMapa),
+          displayPadding(!props.isItemMapa),
         ]}
       >
         <View style={styles.containerItem}>
+          {/* Coluna esquerda - Logo, bandeira, coração + rating */}
           <View style={styles.containerLogo}>
             <Image
               source={
@@ -79,16 +82,29 @@ export default props => {
 
             <Text style={styles.labelBandeira}>{props.bandeira}</Text>
 
-            <TouchableOpacity onPress={() => props.onFavorito()}>
-              <Icon
-                style={{ marginTop: 8, marginBottom: 7 }}
-                type="font-awesome"
-                name={props.isFavorito ? 'heart' : 'heart-o'}
-                size={22}
-                color="rgba(250,206,0,1.0)"
+            {/* Coração + Estrelas lado a lado */}
+            <View style={styles.favoritoRatingRow}>
+              <TouchableOpacity onPress={() => props.onFavorito()}>
+                <Icon
+                  type="font-awesome"
+                  name={props.isFavorito ? 'heart' : 'heart-o'}
+                  size={18}
+                  color="rgba(250,206,0,1.0)"
+                />
+              </TouchableOpacity>
+
+              <Rating
+                readonly
+                startingValue={parseFloat(props.rating) || 0}
+                imageSize={12}
+                style={{ marginLeft: 6 }}
               />
-            </TouchableOpacity>
+
+              <Text style={styles.reviewsText}>({props.reviews || 0})</Text>
+            </View>
           </View>
+
+          {/* Coluna central - Detalhes */}
           <View style={styles.containerDetail}>
             <View style={{ flexDirection: 'row' }}>
               <View style={{ width: '70%' }}>
@@ -108,30 +124,9 @@ export default props => {
             <Text numberOfLines={3} style={styles.endereco}>
               {props.endereco}
             </Text>
-
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'flex-start',
-                alignItems: 'center',
-                marginTop: 5,
-                marginBottom: 15,
-              }}
-            >
-              <AirbnbRating
-                size={11}
-                isDisabled={true}
-                showRating={false}
-                defaultRating={props.rating}
-                starStyle={{ margin: 1 }}
-              />
-
-              <Text style={{ fontSize: 11, marginLeft: 3, color: '#bbb' }}>
-                {`(` + props.reviews + `)`}
-              </Text>
-            </View>
           </View>
 
+          {/* Coluna direita - Preço */}
           <View style={styles.containerRight}>
             <View style={styles.containerInnerRight}>
               <View
@@ -189,7 +184,6 @@ const styles = StyleSheet.create({
   containerItem: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
-    //height: 95,
   },
   containerLogo: {
     flexDirection: 'column',
@@ -197,7 +191,17 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 8,
     paddingLeft: 3,
-    width: '15%',
+    width: '25%', // dá mais espaço, mas sem espremê-lo
+  },
+  favoritoRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  reviewsText: {
+    fontSize: 11,
+    marginLeft: 3,
+    color: '#bbb',
   },
   favoritoForaRaio: {
     flexDirection: 'row',
@@ -242,7 +246,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   containerDetail: {
-    width: '56%',
+    width: '49%', // ligeiramente maior que antes
     paddingTop: 8,
     paddingRight: 6,
     paddingLeft: 3,
@@ -264,12 +268,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     paddingHorizontal: 2,
     textAlign: 'right',
-  },
-  favorito: {
-    flex: 1,
-    backgroundColor: 'red',
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
   },
 });

@@ -1,18 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Icon } from '@rneui/themed';
 import { Buffer } from 'buffer';
-import crypto from 'crypto';
 import { Component } from 'react';
 import {
   Alert,
   FlatList,
   Modal,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import Geolocation from 'react-native-geolocation-service';
 import {
   check,
@@ -26,7 +26,12 @@ import ItemLista from '../componentes/ItemLista';
 import MenuBar from '../componentes/MenuBar';
 import OrderLista from '../componentes/OrderLista';
 import StatusBar from '../componentes/StatusBar';
-import { secret_key_encrypt_data, server } from '../constants';
+import { server } from '../constants'; // agora só o server
+import { decrypt } from '../utils/crypto'; // 🔑 import do helper centralizado
+
+if (typeof global.Buffer === 'undefined') {
+  global.Buffer = Buffer;
+}
 
 var timerId;
 var isMounting;
@@ -70,7 +75,6 @@ export default class ListaPostos extends Component {
 
     this.props.navigation.addListener('focus', async () => {
       if (isMounting == false) {
-        //console.log("FOCUS");
         clearInterval(timerId);
         await this.obterDadosArmazendados();
         this.verificarPermissoes();
@@ -80,12 +84,10 @@ export default class ListaPostos extends Component {
     });
 
     this.props.navigation.addListener('blur', async () => {
-      //console.log("BLUR");
       clearInterval(timerId);
     });
 
     if (isMounting == true) {
-      //console.log("DID MOUNT")
       clearInterval(timerId);
       await this.obterDadosArmazendados();
       this.verificarPermissoes();
@@ -94,7 +96,6 @@ export default class ListaPostos extends Component {
   };
 
   componentWillUnmount() {
-    //console.log("UNMOUNT")
     clearInterval(timerId);
   }
 
@@ -121,63 +122,39 @@ export default class ListaPostos extends Component {
         .then(result => {
           switch (result) {
             case RESULTS.UNAVAILABLE:
-              //console.log('This feature is not available (on this device / in this context)',);
-              this.setState({ locationPermission: result, loading: true }, () =>
-                this.alertForLocationPermission(),
-              );
-              break;
             case RESULTS.DENIED:
-              //console.log('The permission has not been requested / is denied but requestable',);
+            case RESULTS.BLOCKED:
               this.setState({ locationPermission: result, loading: true }, () =>
                 this.alertForLocationPermission(),
               );
               break;
             case RESULTS.GRANTED:
-              //console.log('The permission is granted');
               this.setState({ locationPermission: result, loading: true }, () =>
                 this.obterListaPostos(),
               );
               break;
-            case RESULTS.BLOCKED:
-              //console.log('The permission is denied and not requestable anymore');
-              this.setState({ locationPermission: result, loading: true }, () =>
-                this.alertForLocationPermission(),
-              );
-              break;
           }
         })
-        .catch(error => {});
+        .catch(() => {});
     } else if (Platform.OS === 'android') {
       check(PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION)
         .then(result => {
           switch (result) {
             case RESULTS.UNAVAILABLE:
-              //console.log('This feature is not available (on this device / in this context)',);
-              this.setState({ locationPermission: result, loading: true }, () =>
-                this.alertForLocationPermission(),
-              );
-              break;
             case RESULTS.DENIED:
-              //console.log('The permission has not been requested / is denied but requestable',);
+            case RESULTS.BLOCKED:
               this.setState({ locationPermission: result, loading: true }, () =>
                 this.alertForLocationPermission(),
               );
               break;
             case RESULTS.GRANTED:
-              //console.log('The permission is granted');
               this.setState({ locationPermission: result, loading: true }, () =>
                 this.obterListaPostos(),
               );
               break;
-            case RESULTS.BLOCKED:
-              //console.log('The permission is denied and not requestable anymore');
-              this.setState({ locationPermission: result, loading: true }, () =>
-                this.alertForLocationPermission(),
-              );
-              break;
           }
         })
-        .catch(error => {});
+        .catch(() => {});
     }
   };
 
@@ -194,8 +171,8 @@ export default class ListaPostos extends Component {
           style: 'cancel',
         },
         this.state.locationPermission == RESULTS.DENIED
-          ? { text: 'OK', onPress: this.requestPermission() }
-          : { text: 'Abrir Configurações', onPress: openSettings() },
+          ? { text: 'OK', onPress: this.requestPermission }
+          : { text: 'Abrir Configurações', onPress: openSettings },
       ],
     );
   };
@@ -221,8 +198,6 @@ export default class ListaPostos extends Component {
       const jsonUserData = await AsyncStorage.getItem('userData');
       const userData = JSON.parse(jsonUserData) || {};
 
-      //console.log(userData.token)
-
       this.setState({
         preferenceData: preferenceData,
         filterData: filterData,
@@ -230,14 +205,13 @@ export default class ListaPostos extends Component {
         orderData: orderData,
       });
     } catch (error) {
-      //...
       this.setState(
         {
           loading: false,
           slideAnimationDialog: true,
           alertMessage: 'Não foi possível obter os dados armazenados.',
           alertDetailMessage: '',
-          alertIconType: 'exclamation', // exclamation, times, check
+          alertIconType: 'exclamation',
         },
         () => this.showAlert(),
       );
@@ -257,13 +231,11 @@ export default class ListaPostos extends Component {
     }
 
     if (timer > 0) {
-      //clearInterval(timerId);
       timerId = setInterval(() => this.obterListaPostos(), timer);
     }
   };
 
   obterListaPostos = async () => {
-    //try {
     Geolocation.getCurrentPosition(
       position => {
         this.setState(
@@ -274,7 +246,7 @@ export default class ListaPostos extends Component {
           this.listarPostos,
         );
       },
-      error => {
+      () => {
         this.setState(
           {
             loading: false,
@@ -283,45 +255,13 @@ export default class ListaPostos extends Component {
             alertDetailMessage:
               'Por favor, verifique se o serviço de localização está habilitado.',
             headerMessage: '',
-            alertIconType: 'exclamation', // exclamation, times, check
+            alertIconType: 'exclamation',
           },
           this.showAlert,
         );
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 },
     );
-    /*
-        } catch (err) {
-            this.setState({
-                loading: false,
-                slideAnimationDialog: true,
-                alertMessage: "Não foi possível obter a localização",
-                alertDetailMessage: "Por favor, verifique se o serviço de localização está habilitado.",
-                headerMessage: '',
-                alertIconType: 'exclamation', // exclamation, times, check
-            }, this.showAlert)
-        }
-        */
-  };
-
-  decrypt = textToDecipher => {
-    var dec = '';
-
-    if (textToDecipher != null) {
-      var iv = Buffer(8);
-      iv.fill(0);
-
-      var decipher = crypto.createDecipheriv(
-        'des-cbc',
-        secret_key_encrypt_data,
-        iv,
-      );
-
-      var dec = decipher.update(textToDecipher, 'base64', 'utf8');
-      dec += decipher.final('utf8');
-    }
-
-    return dec;
   };
 
   listarPostos = async () => {
@@ -335,10 +275,13 @@ export default class ListaPostos extends Component {
         this.state.filterData.combustivel === undefined
           ? ''
           : this.state.filterData.combustivel;
+
       const url = `${server}/listarPostosPorProximidade?dist=${this.state.filterData.raio}&lat=${this.state.latitude}&lng=${this.state.longitude}&bnd=${selBandeira}&cmb=${selCombustivel}&ord=${this.state.orderData.ordenacao}&src=LISTA`;
 
-      //console.log(url)
-      //console.log(this.state.userData.token)
+      // 🔎 logs antes do fetch
+      console.log('====================================');
+      console.log('🚀 URL chamada:', url);
+      console.log('🚀 Token usado:', this.state.userData.token);
 
       let response = await fetch(url, {
         method: 'GET',
@@ -351,23 +294,25 @@ export default class ListaPostos extends Component {
 
       let responseJson = await response.json();
 
-      //console.log(responseJson)
+      // 🔎 log da resposta
+      console.log('🚀 Resposta bruta da API:', responseJson);
 
-      let txtMaiorPreco = responseJson.data2.maiorPreco;
-      let txtMenorPreco = responseJson.data2.menorPreco;
-      let txtDiferencaPreco = responseJson.data2.difPreco;
+      let txtMaiorPreco = responseJson.data2?.maiorPreco;
+      let txtMenorPreco = responseJson.data2?.menorPreco;
+      let txtDiferencaPreco = responseJson.data2?.difPreco;
 
       this.setState({
         loading: false,
-        postos: responseJson.data,
+        postos: responseJson.data || [],
         bandeira: selBandeira,
         txtMaiorPreco: txtMaiorPreco,
         txtMenorPreco: txtMenorPreco,
         txtDiferencaPreco: txtDiferencaPreco,
         headerMessage:
-          responseJson.data.length === 0 ? 'Nenhum posto foi encontrado.' : '',
+          responseJson.data?.length === 0 ? 'Nenhum posto foi encontrado.' : '',
       });
     } catch (err) {
+      console.log('❌ Erro no listarPostos:', err);
       this.setState(
         {
           loading: false,
@@ -375,7 +320,7 @@ export default class ListaPostos extends Component {
           alertMessage: 'Não foi possível listar os postos!',
           alertDetailMessage:
             'Por favor, verifique se a internet está disponível.',
-          alertIconType: 'exclamation', // exclamation, times, check
+          alertIconType: 'exclamation',
           headerMessage: '',
         },
         this.showAlert,
@@ -384,26 +329,21 @@ export default class ListaPostos extends Component {
   };
 
   openReferencia = () => {
-    //clearInterval(timerId);
     this.props.navigation.navigate('Referencia');
   };
   openMapa = () => {
-    //clearInterval(timerId);
     this.props.navigation.navigate('MapaPostos');
   };
   openMenu = () => {
     this.props.navigation.openDrawer();
   };
   openFavoritos = () => {
-    //clearInterval(timerId);
     this.props.navigation.navigate('ListaFavoritos');
   };
   openFiltro = () => {
-    //clearInterval(timerId);
     this.props.navigation.navigate('Preferencias');
   };
   openDetalhesPosto = async item => {
-    //clearInterval(timerId);
     await AsyncStorage.setItem('lastScreen', 'ListaPostos');
     await AsyncStorage.setItem('postoItem', JSON.stringify(item));
     this.props.navigation.navigate('DetalhesPosto');
@@ -482,25 +422,25 @@ export default class ListaPostos extends Component {
               renderItem={({ item }) => (
                 <ItemLista
                   {...item}
-                  nomePosto={this.decrypt(item.ex2)}
-                  reviews={this.decrypt(item.ex17)}
-                  rating={this.decrypt(item.ex18)}
+                  nomePosto={decrypt(item.ex2)}
+                  reviews={parseInt(decrypt(item.ex17)) || 0} // ✅ garante número
+                  rating={parseFloat(decrypt(item.ex18)) || 0} // ✅ garante número
                   endereco={
-                    this.decrypt(item.ex3) +
+                    decrypt(item.ex3) +
                     ` - ` +
-                    this.decrypt(item.ex4) +
+                    decrypt(item.ex4) +
                     ` - ` +
-                    this.decrypt(item.ex5)
+                    decrypt(item.ex5)
                   }
-                  bandeira={this.decrypt(item.ex6)}
-                  distancia={this.decrypt(item.ex11)}
+                  bandeira={decrypt(item.ex6)}
+                  distancia={decrypt(item.ex11)}
                   displayLogo={true}
                   isItemMapa={false}
                   isFavorito={item.ex7}
                   isForaDoRaio={item.ex12}
-                  preco={this.decrypt(item.ex13)}
-                  atualizacao={this.decrypt(item.ex15)}
-                  colorData={this.decrypt(item.ex16)}
+                  preco={decrypt(item.ex13)}
+                  atualizacao={decrypt(item.ex15)}
+                  colorData={decrypt(item.ex16)}
                   onSelect={() => this.openDetalhesPosto(item)}
                 />
               )}
@@ -591,11 +531,6 @@ export default class ListaPostos extends Component {
             </Modal>
           </View>
         </View>
-        {/*
-                <View style={[styles.containerActivity, {display: this.state.loading ? 'flex' : 'none'}]}>
-                    <ActivityIndicator style={{display: this.state.loading ? 'flex' : 'none'}} size="large" color="#rgba(0, 0, 0, 0.9)" />
-                </View>  
-                */}
       </SafeAreaView>
     );
   }
