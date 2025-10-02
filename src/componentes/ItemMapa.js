@@ -1,5 +1,6 @@
-import { AirbnbRating, Badge } from '@rneui/themed';
+import { Badge } from '@rneui/themed';
 import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
+import { AirbnbRating } from 'react-native-ratings';
 
 const windowWidth = Dimensions.get('window').width;
 const widthRef = 375;

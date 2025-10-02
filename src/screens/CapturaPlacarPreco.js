@@ -1,18 +1,19 @@
 import { Icon, Slider } from '@rneui/themed';
-import { PureComponent } from 'react';
+import React, { PureComponent } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
   Image,
   Modal,
-  SafeAreaView,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { RNCamera as Camera } from 'react-native-camera';
-//import Geolocation from '@react-native-community/geolocation';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Camera, useCameraDevices } from 'react-native-vision-camera';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Geolocation from 'react-native-geolocation-service';
 import { SECURITY_TOKEN, serverUpload } from '../constants';
@@ -25,9 +26,88 @@ const sizeTextButtonRef = 14;
 const stepZoom = Platform.OS === 'ios' ? 0.0005 : 0.05;
 const maxZoom = Platform.OS === 'ios' ? 0.1 : 1;
 
-export default class CapturaPlacarPreco extends PureComponent {
-  _isMounted = false;
+// Componente funcional wrapper só para usar hook de devices
+function CameraView({ zoom, onZoomChange, onCapture, innerRef }) {
+  const devices = useCameraDevices();
+  const device = devices.back;
 
+  if (!device) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#fff' }}>Carregando câmera...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <Camera
+        ref={innerRef}
+        style={{ flex: 1 }}
+        device={device}
+        isActive={true}
+        photo={true}
+        zoom={zoom}
+      />
+
+      {/* Slider sobreposto */}
+      <Slider
+        style={{
+          position: 'absolute',
+          bottom: 120,
+          alignSelf: 'center',
+          width: windowWidth * 0.7,
+          height: 40,
+        }}
+        minimumValue={0}
+        step={stepZoom}
+        value={zoom}
+        maximumValue={maxZoom}
+        minimumTrackTintColor="rgba(0,185,85,1.0)"
+        maximumTrackTintColor="rgba(230,230,230,1.0)"
+        thumbProps={{ color: 'rgba(255,255,255, 1.0)' }}
+        thumbStyle={{
+          height: 35,
+          width: 35,
+          borderColor: 'rgba(176,180,187,1.0)',
+          borderWidth: 5,
+        }}
+        onValueChange={onZoomChange}
+      />
+
+      {/* Botões sobrepostos */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 30,
+          flexDirection: 'row',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '100%',
+          padding: 17,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+        }}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, alignItems: 'center' }}
+          onPress={onCapture.cancel}
+        >
+          <Icon name="times" size={35} type="font-awesome" color="#fff" />
+          <Text style={styles.labelButton}>Cancelar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ flex: 1, alignItems: 'center' }}
+          onPress={onCapture.take}
+        >
+          <Icon name="camera" type="font-awesome" size={60} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ width: 90, flex: 1, alignItems: 'center' }} />
+      </View>
+    </View>
+  );
+}
+
+export default class CapturaPlacarPreco extends PureComponent {
   constructor(props) {
     super(props);
     this.state = {
@@ -39,30 +119,27 @@ export default class CapturaPlacarPreco extends PureComponent {
       slideAnimationDialog: false,
       alertMessage: '',
       alertDetailMessage: '',
-      alertIconType: 'check', // exclamation, times, check
+      alertIconType: 'check',
       loading: false,
       zoom: 0,
     };
+    this.cameraRef = React.createRef();
   }
 
-  componentDidMount = async () => {
-    _isMounted = true;
+  async componentDidMount() {
+    const permission = await Camera.requestCameraPermission();
+    if (permission !== 'authorized') {
+      console.warn('⚠️ Permissão da câmera não concedida!');
+    }
 
     this.props.navigation.addListener('focus', async () => {
-      //console.log("Captura Focus")
       clearInterval(timerId);
       await this.obterDadosArmazendados();
-
       const posto = await AsyncStorage.getItem('postoCaptura');
-      const jsonPosto = JSON.parse(posto);
-
-      this.setState({ postoCaptura: jsonPosto });
-
-      //console.log(jsonPosto.codItem)
+      this.setState({ postoCaptura: JSON.parse(posto) });
     });
 
     this.props.navigation.addListener('blur', async () => {
-      //console.log("Detalhes Blur")
       this.setState({
         pathImage: null,
         zoom: 0,
@@ -71,36 +148,22 @@ export default class CapturaPlacarPreco extends PureComponent {
       });
       clearInterval(timerId);
     });
-
-    if (_isMounted) {
-      clearInterval(timerId);
-      await this.obterDadosArmazendados();
-      const posto = await AsyncStorage.getItem('postoCaptura');
-      const jsonPosto = JSON.parse(posto);
-      this.setState({ postoCaptura: jsonPosto });
-    }
-  };
+  }
 
   componentWillUnmount() {
-    _isMounted = false;
     clearInterval(timerId);
   }
 
   obterDadosArmazendados = async () => {
     try {
       const jsonUserData = await AsyncStorage.getItem('userData');
-      const userData = JSON.parse(jsonUserData) || {};
-
-      this.setState({
-        userData: userData,
-      });
+      this.setState({ userData: JSON.parse(jsonUserData) || {} });
     } catch (error) {
       console.log('error: ', error);
     }
   };
 
   obterLocalizacao = () => {
-    //try {
     Geolocation.getCurrentPosition(
       position => {
         this.setState({
@@ -108,31 +171,19 @@ export default class CapturaPlacarPreco extends PureComponent {
           latitudeUsuario: position.coords.latitude,
         });
       },
-      error => {},
+      error => console.log(error),
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 },
     );
-
-    //} catch (err) {}
   };
 
   takePicture = async () => {
     try {
-      const response = await this.camera.takePictureAsync({
-        width: 800,
-        quality: 0.8,
-        exif: true,
-        orientation: 'portrait',
-        fixOrientation: true,
-        forceUpOrientation: true,
-        //base64: true,
-        skipProcessing: true,
-        //pauseAfterCapture: true,
+      const photo = await this.cameraRef.current.takePhoto({
+        flash: 'off',
       });
 
       this.setState(
-        {
-          pathImage: response.uri,
-        },
+        { pathImage: 'file://' + photo.path },
         this.obterLocalizacao,
       );
     } catch (error) {
@@ -161,7 +212,6 @@ export default class CapturaPlacarPreco extends PureComponent {
     );
 
     const url = `${serverUpload}/uploadFile`;
-
     var formData = new FormData();
     formData.append('file', photo);
     formData.append('codItem', this.state.postoCaptura.codItem);
@@ -182,13 +232,10 @@ export default class CapturaPlacarPreco extends PureComponent {
         body: formData,
       });
 
-      let mensagem = '';
-
-      if (response.status == 200) {
-        mensagem = 'Foto enviada com sucesso!';
-      } else {
-        mensagem = 'Ocorreu um erro durante o envio da foto!';
-      }
+      let mensagem =
+        response.status == 200
+          ? 'Foto enviada com sucesso!'
+          : 'Ocorreu um erro durante o envio da foto!';
 
       this.setState(
         {
@@ -215,33 +262,20 @@ export default class CapturaPlacarPreco extends PureComponent {
     }
   };
 
-  verificaRedirecionamento = () => {
-    if (this.state.alertIconType == 'check') {
-      this.goBack();
-    }
-  };
-
   distance = (lat1, lon1, lat2, lon2) => {
-    if (lat1 == lat2 && lon1 == lon2) {
-      return 0;
-    } else {
-      var radlat1 = (Math.PI * lat1) / 180;
-      var radlat2 = (Math.PI * lat2) / 180;
-      var theta = lon1 - lon2;
-      var radtheta = (Math.PI * theta) / 180;
-      var dist =
-        Math.sin(radlat1) * Math.sin(radlat2) +
-        Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
-      if (dist > 1) {
-        dist = 1;
-      }
-      dist = Math.acos(dist);
-      dist = (dist * 180) / Math.PI;
-      dist = dist * 60 * 1.1515;
-      dist = dist * 1.609344;
-
-      return dist;
-    }
+    if (lat1 == lat2 && lon1 == lon2) return 0;
+    var radlat1 = (Math.PI * lat1) / 180;
+    var radlat2 = (Math.PI * lat2) / 180;
+    var theta = lon1 - lon2;
+    var radtheta = (Math.PI * theta) / 180;
+    var dist =
+      Math.sin(radlat1) * Math.sin(radlat2) +
+      Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
+    if (dist > 1) dist = 1;
+    dist = Math.acos(dist);
+    dist = (dist * 180) / Math.PI;
+    dist = dist * 60 * 1.1515 * 1.609344;
+    return dist;
   };
 
   showAlert = () => {
@@ -251,71 +285,29 @@ export default class CapturaPlacarPreco extends PureComponent {
 
   closeAlert = () => {
     this.setState(
-      {
-        slideAnimationDialog: false,
-      },
+      { slideAnimationDialog: false },
       this.verificaRedirecionamento,
     );
+  };
+
+  verificaRedirecionamento = () => {
+    if (this.state.alertIconType == 'check') {
+      this.goBack();
+    }
   };
 
   renderCamera() {
     return (
       <SafeAreaView style={{ flex: 1 }}>
-        <Camera
-          ref={ref => {
-            this.camera = ref;
-          }}
-          style={styles.preview}
-          type={Camera.Constants.Type.back}
-          flashMode={Camera.Constants.FlashMode.off}
-          captureAudio={false}
-          autoFocus={Camera.Constants.AutoFocus.on}
+        <CameraView
+          innerRef={this.cameraRef}
           zoom={this.state.zoom}
-          ratio="16:9"
-        >
-          <Slider
-            style={{ top: -20, width: windowWidth * 0.7, height: 40 }}
-            minimumValue={0}
-            step={stepZoom}
-            value={this.state.zoom}
-            maximumValue={maxZoom}
-            minimumTrackTintColor="rgba(0,185,85,1.0)"
-            maximumTrackTintColor="rgba(230,230,230,1.0)"
-            thumbProps={{ color: 'rgba(255,255,255, 1.0)' }}
-            thumbStyle={{
-              height: 35,
-              width: 35,
-              borderColor: 'rgba(176,180,187,1.0)',
-              borderWidth: 5,
-            }}
-            onValueChange={value => this.setState({ zoom: value })}
-          />
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'center',
-              alignItems: 'center',
-              padding: 17,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              width: '100%',
-            }}
-          >
-            <TouchableOpacity
-              style={{ flex: 1, alignItems: 'center' }}
-              onPress={() => this.goBack()}
-            >
-              <Icon name="times" size={35} type="font-awesome" color="#fff" />
-              <Text style={styles.labelButton}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{ flex: 1, alignItems: 'center' }}
-              onPress={this.takePicture.bind(this)}
-            >
-              <Icon name="camera" type="font-awesome" size={60} color="#fff" />
-            </TouchableOpacity>
-            <View style={{ width: 90, flex: 1, alignItems: 'center' }} />
-          </View>
-        </Camera>
+          onZoomChange={value => this.setState({ zoom: value })}
+          onCapture={{
+            cancel: this.goBack,
+            take: this.takePicture,
+          }}
+        />
       </SafeAreaView>
     );
   }
@@ -464,37 +456,11 @@ const styles = StyleSheet.create({
     height: windowHeight,
     width: windowWidth,
   },
-  capture: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 5,
-    borderColor: '#FFF',
-    marginBottom: 15,
-  },
   labelButton: {
     color: '#FFF',
     fontSize: (windowWidth * sizeTextButtonRef) / widthRef,
   },
-  cancel: {
-    position: 'absolute',
-    right: 20,
-    top: 20,
-    backgroundColor: 'transparent',
-    color: '#FFF',
-    fontWeight: '600',
-    fontSize: 17,
-  },
   containerActivity: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loading: {
     position: 'absolute',
     left: 0,
     right: 0,

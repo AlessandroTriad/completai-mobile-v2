@@ -1,20 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Icon } from '@rneui/themed';
 import { Buffer } from 'buffer';
-import crypto from 'crypto';
 import { Component } from 'react';
 import {
   Alert,
   FlatList,
   Modal,
-  //LogBox,
   RefreshControl,
-  //ActivityIndicator,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import Geolocation from 'react-native-geolocation-service';
 import {
   check,
@@ -28,18 +26,14 @@ import ItemLista from '../componentes/ItemLista';
 import MenuBar from '../componentes/MenuBar';
 import OrderLista from '../componentes/OrderLista';
 import StatusBar from '../componentes/StatusBar';
-import { secret_key_encrypt_data, server } from '../constants';
+import { server } from '../constants'; // agora só o server
+import { decrypt } from '../utils/crypto'; // 🔑 importando helper centralizado
 
+if (typeof global.Buffer === 'undefined') {
+  global.Buffer = Buffer;
+}
 var timerId;
 var isMounting;
-
-/*
-LogBox.ignoreLogs([
-    "exported from 'deprecated-react-native-prop-types'.",
-    'Require cycle:',
-    'Failed prop type:'
-])
-*/
 
 export default class ListaFavoritos extends Component {
   state = {
@@ -123,75 +117,43 @@ export default class ListaFavoritos extends Component {
         .then(result => {
           switch (result) {
             case RESULTS.UNAVAILABLE:
-              //console.log('This feature is not available (on this device / in this context)',);
-              this.setState(
-                { locationPermission: result, loading: true },
-                this.alertForLocationPermission,
-              );
-              break;
             case RESULTS.DENIED:
-              //console.log('The permission has not been requested / is denied but requestable',);
+            case RESULTS.BLOCKED:
               this.setState(
                 { locationPermission: result, loading: true },
                 this.alertForLocationPermission,
               );
               break;
             case RESULTS.GRANTED:
-              //console.log('The permission is granted');
               this.setState(
                 { locationPermission: result, loading: true },
                 this.obterListaPostos,
               );
               break;
-            case RESULTS.BLOCKED:
-              //console.log('The permission is denied and not requestable anymore');
-              this.setState(
-                { locationPermission: result, loading: true },
-                this.alertForLocationPermission,
-              );
-              break;
           }
         })
-        .catch(error => {
-          // …
-        });
+        .catch(() => {});
     } else if (Platform.OS === 'android') {
       check(PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION)
         .then(result => {
           switch (result) {
             case RESULTS.UNAVAILABLE:
-              //console.log('This feature is not available (on this device / in this context)',);
-              this.setState(
-                { locationPermission: result, loading: true },
-                this.alertForLocationPermission,
-              );
-              break;
             case RESULTS.DENIED:
-              //console.log('The permission has not been requested / is denied but requestable',);
+            case RESULTS.BLOCKED:
               this.setState(
                 { locationPermission: result, loading: true },
                 this.alertForLocationPermission,
               );
               break;
             case RESULTS.GRANTED:
-              //console.log('The permission is granted');
               this.setState(
                 { locationPermission: result, loading: true },
                 this.obterListaPostos,
               );
               break;
-            case RESULTS.BLOCKED:
-              //console.log('The permission is denied and not requestable anymore');
-              this.setState(
-                { locationPermission: result, loading: true },
-                this.alertForLocationPermission,
-              );
-              break;
           }
         })
-        .catch(error => {
-          // …
-        });
+        .catch(() => {});
     }
   };
 
@@ -270,7 +232,7 @@ export default class ListaFavoritos extends Component {
           this.listarPostos,
         );
       },
-      error => {
+      () => {
         this.setState(
           {
             loading: false,
@@ -279,7 +241,7 @@ export default class ListaFavoritos extends Component {
             alertDetailMessage:
               'Por favor, verifique se o serviço de localização está habilitado.',
             headerMessage: '',
-            alertIconType: 'exclamation', // exclamation, times, check
+            alertIconType: 'exclamation',
           },
           this.showAlert,
         );
@@ -295,9 +257,6 @@ export default class ListaFavoritos extends Component {
           ? ''
           : this.state.filterData.bandeira;
       const url = `${server}/listarPostosFavoritos?dist=${this.state.filterData.raio}&lat=${this.state.latitude}&lng=${this.state.longitude}&bnd=${this.state.filterData.bandeira}&cmb=${this.state.filterData.combustivel}&ord=${this.state.orderData.ordenacao}`;
-
-      //console.log(url)
-      //console.log("[" + this.state.userData.token + "]")
 
       let response = await fetch(url, {
         method: 'GET',
@@ -325,7 +284,7 @@ export default class ListaFavoritos extends Component {
           alertMessage: 'Não foi possível listar os postos favoritos.',
           alertDetailMessage:
             'Por favor, verifique se a internet está disponível.',
-          alertIconType: 'exclamation', // exclamation, times, check
+          alertIconType: 'exclamation',
           headerMessage: '',
         },
         this.showAlert,
@@ -333,43 +292,19 @@ export default class ListaFavoritos extends Component {
     }
   };
 
-  decrypt = textToDecipher => {
-    var dec = '';
-
-    if (textToDecipher != null) {
-      var iv = Buffer(8);
-      iv.fill(0);
-
-      var decipher = crypto.createDecipheriv(
-        'des-cbc',
-        secret_key_encrypt_data,
-        iv,
-      );
-
-      var dec = decipher.update(textToDecipher, 'base64', 'utf8');
-      dec += decipher.final('utf8');
-    }
-
-    return dec;
-  };
-
   openReferencia = () => {
-    //clearInterval(timerId);
     this.props.navigation.navigate('Referencia');
   };
   openListagem = () => {
-    //clearInterval(timerId);
     this.props.navigation.navigate('ListaPostos');
   };
   openMenu = () => {
     this.props.navigation.openDrawer();
   };
   openMapa = () => {
-    //clearInterval(timerId);
     this.props.navigation.navigate('MapaPostos');
   };
   openFiltro = () => {
-    //clearInterval(timerId);
     this.props.navigation.navigate('Preferencias');
   };
   onChange = index => {
@@ -391,15 +326,11 @@ export default class ListaFavoritos extends Component {
     });
   };
   openDetalhesPosto = async item => {
-    //clearInterval(timerId);
-    //console.log("item: " + JSON.stringify(item))
     await AsyncStorage.setItem('lastScreen', 'ListaFavoritos');
     await AsyncStorage.setItem('postoItem', JSON.stringify(item));
-    //this.props.navigation.navigate('DetalhesPosto', { params: { posto: item } })
     this.props.navigation.navigate('DetalhesPosto');
   };
   showAlert = () => {
-    //clearInterval(timerId);
     setTimeout(() => this.closeAlert(), 3000);
   };
   closeAlert = () => {
@@ -453,23 +384,23 @@ export default class ListaFavoritos extends Component {
                   displayLogo={true}
                   isFavorito={item.ex7}
                   onSelect={() => this.openDetalhesPosto(item)}
-                  nomePosto={this.decrypt(item.ex2)}
-                  reviews={this.decrypt(item.ex17)}
-                  rating={this.decrypt(item.ex18)}
+                  nomePosto={decrypt(item.ex2)}
+                  reviews={decrypt(item.ex17)}
+                  rating={decrypt(item.ex18)}
                   endereco={
-                    this.decrypt(item.ex3) +
+                    decrypt(item.ex3) +
                     ` - ` +
-                    this.decrypt(item.ex4) +
+                    decrypt(item.ex4) +
                     ` - ` +
-                    this.decrypt(item.ex5)
+                    decrypt(item.ex5)
                   }
-                  bandeira={this.decrypt(item.ex6)}
-                  distancia={this.decrypt(item.ex11)}
+                  bandeira={decrypt(item.ex6)}
+                  distancia={decrypt(item.ex11)}
                   isItemMapa={false}
                   isForaDoRaio={item.ex12}
-                  preco={this.decrypt(item.ex13)}
-                  atualizacao={this.decrypt(item.ex15)}
-                  colorData={this.decrypt(item.ex16)}
+                  preco={decrypt(item.ex13)}
+                  atualizacao={decrypt(item.ex15)}
+                  colorData={decrypt(item.ex16)}
                 />
               )}
               refreshControl={
@@ -559,11 +490,6 @@ export default class ListaFavoritos extends Component {
             </Modal>
           </View>
         </View>
-        {/*
-                <View style={[styles.containerActivity, {display: this.state.loading ? 'flex' : 'none'}]}>
-                    <ActivityIndicator style={{display: this.state.loading ? 'flex' : 'none'}} size="large" color="#rgba(0, 0, 0, 0.9)" />
-                </View> 
-                */}
       </SafeAreaView>
     );
   }
@@ -597,12 +523,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-
-/*
-// Wrap and export
-export default function(props) {
-    const navigation = useNavigation();
-  
-    return <ListaFavoritos {...props} navigation={navigation} />;
-}
-*/

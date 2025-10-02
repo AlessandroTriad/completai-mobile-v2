@@ -3,13 +3,13 @@ import Icon from 'react-native-vector-icons/FontAwesome';
 
 export default props => {
   return (
-    <View style={[styles.container, props.style]}>
+    <View style={[styles.container, props.style || {}]}>
       <Icon name={props.icon} size={20} style={styles.icon} />
       <Text
         style={[
           styles.label,
           {
-            color: !props.colorLabel ? 'rgba(75,75,75,1.0)' : props.colorLabel,
+            color: props.colorLabel ? props.colorLabel : 'rgba(75,75,75,1.0)',
           },
         ]}
       >
